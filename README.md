@@ -11,18 +11,29 @@ external services, no accounts and no database.
 |---|---|
 | `vufeedback.php` | WordPress plugin: loads the widget and adds **Settings > VuFeedback**. Not used on plain HTML sites. |
 | `feedback.js` | The widget. Draws inside a shadow root so it never clashes with the site's CSS. Does nothing for visitors without a key. |
-| `feedback.php` | The API. Runs without WordPress. |
-| `storage.php` | Reads and writes the settings and comments (shared by the two PHP files above). |
+| `feedback.php` | The API for plain HTML sites. On WordPress it loads WordPress and gives the same answers as the WordPress route. |
+| `api.php` | The request handler shared by both routes. |
+| `storage.php` | Reads and writes settings and comments: the database on WordPress, files on a plain HTML site. |
 | `review.html` | Your triage view: filter, change status, delete, jump to each pin on its page, CSV export. |
-| `data/` | Settings, comments and uploads. Must be writable by PHP. Never committed (see `.gitignore`). |
+| `uninstall.php` | Removes VuFeedback's settings, comments and attachments when the plugin is deleted. |
+| `data/` | Plain HTML sites only: settings, comments and uploads. Must be writable by PHP. Never committed. |
 
-### How the data is protected
+### Where the data lives, and how it's protected
 
-Settings and comments are JSON stored in `data/config.php` and `data/pins.php`. Each file
-starts with `<?php exit; ?>`, so requesting it from a browser returns a blank page on any
-server, Apache or nginx. Uploads sit in `data/files/` under random names that are only
-listed in the protected comments file, and are served through `feedback.php` after a key
-check. Nothing in `data/` depends on `.htaccess`.
+**WordPress:** settings and comments are in the database (options `vufeedback_config` and
+`vufeedback_pins`), and the widget reaches them through WordPress's own
+`admin-ajax.php?action=vufeedback`, which hosts never cache. Attachments go in
+`wp-content/uploads/vufeedback-<random>/files/` under random names that are only listed in
+the protected comments, and are served through the API after a key check. This is the
+setup that works on WP Engine, where PHP files requested directly from a plugin folder
+cannot write files and plugin responses get cached.
+
+**Plain HTML:** settings and comments are JSON stored in `data/config.php` and
+`data/pins.php`. Each file starts with `<?php exit; ?>`, so requesting it from a browser
+returns a blank page on any server. Uploads sit in `data/files/` under random names.
+
+Every read the widget makes carries a unique value, so no cache can hand one visitor's
+response to another.
 
 ## Install on WordPress
 
@@ -35,9 +46,10 @@ check. Nothing in `data/` depends on `.htaccess`.
 4. When the review is over, untick **Enabled** (or deactivate). Comments stay in `data/` until
    the plugin is deleted.
 
-Moving from **Site Feedback** (1.2 or earlier): copy the old plugin's `data/` folder into
-`vufeedback/data/`, deactivate the old plugin, activate this one. The old `.json` files are
-converted on first use and then deleted.
+Upgrading from an earlier VuFeedback or Site Feedback: replace the plugin's files. Existing
+file data (the plugin's `data/` folder or `uploads/vufeedback-…/`) is imported into the
+database on first use, keys included. From Site Feedback, copy its `data/` folder into
+`vufeedback/data/` first.
 
 ## Install on a plain HTML site
 
@@ -59,7 +71,7 @@ converted on first use and then deleted.
 |---|---|
 | Client | `https://site/any-page?review=CLIENT_KEY` |
 | You, on the page (status and delete) | `https://site/any-page?review=ADMIN_KEY` |
-| You, the review page | WordPress: `/wp-content/plugins/vufeedback/review.html?key=ADMIN_KEY`; HTML: `/feedback/review.html?key=ADMIN_KEY` |
+| You, the review page | WordPress: the **Open review page** button in Settings > VuFeedback; HTML: `/feedback/review.html?key=ADMIN_KEY` |
 | Switch off in a browser | `?review=off` |
 
 The key is remembered in that browser after the first visit, so reviewers can move around
@@ -83,24 +95,26 @@ element it's pinned to, the screen size, and **Open on page**. Set status to In 
 Resolved as you go; the client sees the colour change on their next visit. **Export CSV**
 gives you the list as a spreadsheet.
 
-The API (`feedback.php?action=list&key=ADMIN_KEY`) returns JSON including each pin's CSS
+The API (`…/admin-ajax.php?action=vufeedback&op=list&key=ADMIN_KEY` on WordPress,
+`feedback.php?action=list&key=ADMIN_KEY` on HTML) returns JSON including each pin's CSS
 selector, which is enough for a developer or an AI assistant to find and act on each comment.
 
 ## API reference
 
+WordPress: `admin-ajax.php?action=vufeedback&op=<op>`. Plain HTML: `feedback.php?action=<op>`.
 Every call takes the key as header `X-Feedback-Key` or `?key=`. Write calls are POST with a
 JSON body.
 
-| Action | Body | Key |
+| Op | Body | Key |
 |---|---|---|
-| `?action=list` | | client |
-| `?action=add` | `{ "pin": {...} }` | client |
-| `?action=reply` | `{ "id", "author", "text" }` | client |
-| `?action=status` | `{ "id", "status": "open\|progress\|resolved" }` | admin |
-| `?action=delete` | `{ "id" }` | admin |
-| `?action=upload` | multipart form: `id`, `author`, `files[]` | client |
-| `?action=file&f=<fileid>` | GET; add `&dl=1` to download | client |
-| `?action=unattach` | `{ "id", "file" }` | admin |
+| `list` | | client |
+| `add` | `{ "pin": {...} }` | client |
+| `reply` | `{ "id", "author", "text" }` | client |
+| `status` | `{ "id", "status": "open\|progress\|resolved" }` | admin |
+| `delete` | `{ "id" }` | admin |
+| `upload` | multipart form: `id`, `author`, `files[]` | client |
+| `file&f=<fileid>` | GET; add `&dl=1` to download | client |
+| `unattach` | `{ "id", "file" }` | admin |
 
 Uploads: images (jpg, png, gif, webp, svg), pdf, Office documents, txt/md/rtf/csv, zip,
 mp4/mov and design files (ai, eps, psd, indd, sketch, fig). 25 MB per file (`MAX_FILE` in

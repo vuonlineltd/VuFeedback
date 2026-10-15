@@ -7,10 +7,16 @@
 (function () {
   'use strict';
 
-  var ENDPOINT = (function () {
-    var s = document.currentScript && document.currentScript.src;
-    return s ? s.replace(/feedback\.js.*$/, 'feedback.php') : 'feedback/feedback.php';
-  })();
+  // WordPress passes its own route (admin-ajax.php, never cached by hosts) in
+  // VUFB_API; a plain HTML site talks to feedback.php beside this script.
+  var SCRIPT = document.currentScript && document.currentScript.src;
+  var ENDPOINT = window.VUFB_API || (SCRIPT ? SCRIPT.replace(/feedback\.js.*$/, 'feedback.php') : 'feedback/feedback.php');
+  var OP = window.VUFB_API ? 'op' : 'action';
+  var REVIEW = window.VUFB_REVIEW || ENDPOINT.replace('feedback.php', 'review.html');
+  // A unique value on every read, so no cache can answer one visitor with another's response.
+  function url(op, extra) {
+    return ENDPOINT + (ENDPOINT.indexOf('?') === -1 ? '?' : '&') + OP + '=' + op + (extra || '') + '&_=' + Date.now() + Math.random().toString(36).slice(2, 7);
+  }
   var LS_KEY = 'fb_key', LS_NAME = 'fb_name';
 
   /* ---- gate ------------------------------------------------------------ */
@@ -111,11 +117,12 @@
   var hl = $('.hl'), mask = $('.mask'), layer = $('.layer'), hint = $('.hint'), panel = $('.panel'),
       list = $('.list'), toast = $('.toast'), mainBtn = $('.btn.main'), countEl = $('.n');
 
-  $('.rev').href = ENDPOINT.replace('feedback.php', 'review.html') + '?key=' + encodeURIComponent(key);
+  $('.rev').href = REVIEW + '?key=' + encodeURIComponent(key) + (window.VUFB_API ? '&api=' + encodeURIComponent(window.VUFB_API) : '');
 
   /* ---- helpers ---------------------------------------------------------- */
   function api(action, data) {
-    return fetch(ENDPOINT + '?action=' + action, {
+    return fetch(url(action), {
+      cache: 'no-store',
       method: data ? 'POST' : 'GET',
       headers: { 'X-Feedback-Key': key, 'Content-Type': 'application/json' },
       body: data ? JSON.stringify(data) : undefined
@@ -128,14 +135,14 @@
   function getName() { try { return localStorage.getItem(LS_NAME) || ''; } catch (e) { return ''; } }
   function setName(n) { try { localStorage.setItem(LS_NAME, n); } catch (e) {} }
 
-  function fileUrl(a, dl) { return ENDPOINT + '?action=file&f=' + encodeURIComponent(a.id) + '&key=' + encodeURIComponent(key) + (dl ? '&dl=1' : ''); }
+  function fileUrl(a, dl) { return url('file', '&f=' + encodeURIComponent(a.id) + '&key=' + encodeURIComponent(key) + (dl ? '&dl=1' : '')); }
   function fmtSize(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
   function isImg(a) { return /\.(jpe?g|png|gif|webp)$/i.test(a.id); }
   function upload(pinId, author, files) {
     if (!files || !files.length) return Promise.resolve(null);
     var fd = new FormData(); fd.append('id', pinId); fd.append('author', author);
     for (var i = 0; i < files.length; i++) fd.append('files[]', files[i]);
-    return fetch(ENDPOINT + '?action=upload', { method: 'POST', headers: { 'X-Feedback-Key': key }, body: fd })
+    return fetch(url('upload'), { method: 'POST', cache: 'no-store', headers: { 'X-Feedback-Key': key }, body: fd })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); if (j.rejected && j.rejected.length) say('Not attached: ' + j.rejected.join(', ')); return j; }); });
   }
   function attachControl(label) {

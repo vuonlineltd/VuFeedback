@@ -54,11 +54,15 @@
   var qs=new URLSearchParams(location.search);
   var key=qs.get('key'); try{ if(key) localStorage.setItem('fb_key',key); key=key||localStorage.getItem('fb_key'); }catch(e){}
   if(!key){ document.getElementById('main').innerHTML='<div class="empty">No key. Open this page from the review link.</div>'; return; }
-  var ENDPOINT='feedback.php', SITE=location.pathname.replace(/feedback\/review\.html$/,'');
+  // On WordPress the settings page passes the API route as ?api= (same site only, or the key could be sent elsewhere).
+  var api0=qs.get('api'), ENDPOINT='feedback.php', OP='action';
+  if(api0){ try{ var u0=new URL(api0,location.href); if(u0.origin===location.origin){ ENDPOINT=u0.href; OP='op'; } }catch(e){} }
+  var SITE=location.pathname.replace(/feedback\/review\.html$/,'');
+  function url(a,x){ return ENDPOINT+(ENDPOINT.indexOf('?')===-1?'?':'&')+OP+'='+a+(x||'')+'&_='+Date.now()+Math.random().toString(36).slice(2,7); }
   var pins=[], admin=false;
-  function api(a,d){ return fetch(ENDPOINT+'?action='+a,{method:d?'POST':'GET',headers:{'X-Feedback-Key':key,'Content-Type':'application/json'},body:d?JSON.stringify(d):undefined}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||r.status);return j;});}); }
+  function api(a,d){ return fetch(url(a),{cache:'no-store',method:d?'POST':'GET',headers:{'X-Feedback-Key':key,'Content-Type':'application/json'},body:d?JSON.stringify(d):undefined}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||r.status);return j;});}); }
   function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e;}
-  function fileUrl(a,dl){return ENDPOINT+'?action=file&f='+encodeURIComponent(a.id)+'&key='+encodeURIComponent(key)+(dl?'&dl=1':'');}
+  function fileUrl(a,dl){return url('file','&f='+encodeURIComponent(a.id)+'&key='+encodeURIComponent(key)+(dl?'&dl=1':''));}
   function isImg(a){return /\.(jpe?g|png|gif|webp)$/i.test(a.id);}
   function fmtSize(b){return b>1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB';}
   function fmt(iso){var d=new Date(iso);return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}

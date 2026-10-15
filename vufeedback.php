@@ -2,7 +2,7 @@
 /**
  * Plugin Name: VuFeedback
  * Description: On-page feedback pins for client review. Loads only for visitors with a review key. Settings > VuFeedback.
- * Version:     1.3.0
+ * Version:     1.4.0
  * Author:      Vu Digital
  * Author URI:  https://vudigital.co.uk
  * Update URI:  false
@@ -14,6 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/storage.php';
+require_once __DIR__ . '/api.php';
 
 define( 'VUFB_DIR', __DIR__ );
 
@@ -41,6 +42,23 @@ register_activation_hook(
 	}
 );
 
+/*
+ * The API goes through WordPress (admin-ajax.php): every host runs it as a
+ * normal WordPress request, and none caches it. Visitors are not logged in, so
+ * the nopriv hook is the one reviewers use; the key is the only permission.
+ */
+add_action( 'wp_ajax_vufeedback', 'vufb_ajax' );
+add_action( 'wp_ajax_nopriv_vufeedback', 'vufb_ajax' );
+
+/**
+ * admin-ajax.php?action=vufeedback&op=<op>
+ *
+ * @return void
+ */
+function vufb_ajax() {
+	vufb_run_api( isset( $_GET['op'] ) ? sanitize_key( wp_unslash( $_GET['op'] ) ) : '' );
+}
+
 /* Front end: the widget, for everyone; it exits at once for visitors without a key. */
 add_action(
 	'wp_enqueue_scripts',
@@ -58,6 +76,11 @@ add_action(
 				'strategy'  => 'defer',
 				'in_footer' => true,
 			)
+		);
+		wp_add_inline_script(
+			'vufeedback',
+			'window.VUFB_API=' . wp_json_encode( admin_url( 'admin-ajax.php?action=vufeedback' ) ) . ';window.VUFB_REVIEW=' . wp_json_encode( plugins_url( 'review.html', __FILE__ ) ) . ';',
+			'before'
 		);
 	}
 );
@@ -106,7 +129,9 @@ function vufb_settings_page() {
 
 	$home     = home_url( '/' );
 	$base     = plugins_url( '', __FILE__ );
-	$writable = is_writable( VUFB_DATA_DIR ) || ( ! is_dir( VUFB_DATA_DIR ) && is_writable( VUFB_DIR ) );
+	$problem  = vufb_storage_problem();
+	$attach   = vufb_attachments_problem();
+	$api      = admin_url( 'admin-ajax.php?action=vufeedback' );
 	$pins     = count( vufb_pins() );
 	$bytes    = 0;
 	foreach ( glob( VUFB_DATA_DIR . '/files/*' ) ?: array() as $f ) {
@@ -121,8 +146,13 @@ function vufb_settings_page() {
 		<?php if ( $msg ) : ?>
 			<div class="notice notice-info"><p><?php echo esc_html( $msg ); ?></p></div>
 		<?php endif; ?>
-		<?php if ( ! $writable ) : ?>
-			<div class="notice notice-error"><p>The <code>data/</code> folder inside the plugin is not writable. Comments and settings cannot be saved until it is.</p></div>
+		<?php if ( $problem ) : ?>
+			<div class="notice notice-error"><p><strong>Comments cannot be saved.</strong> <?php echo esc_html( $problem ); ?> The folder is <code><?php echo esc_html( VUFB_DATA_DIR ); ?></code>; it must be writable by PHP.</p></div>
+		<?php else : ?>
+			<div class="notice notice-success inline"><p>Storage check passed: comments can be saved. They are kept in the WordPress database; attachments go in <code><?php echo esc_html( str_replace( ABSPATH, '', VUFB_DATA_DIR . '/files' ) ); ?></code>.</p></div>
+		<?php endif; ?>
+		<?php if ( $attach ) : ?>
+			<div class="notice notice-warning inline"><p><strong>Attachments may not save.</strong> <?php echo esc_html( $attach ); ?> Comments are unaffected.</p></div>
 		<?php endif; ?>
 		<form method="post">
 			<?php wp_nonce_field( 'vufb_save', 'vufb_nonce' ); ?>
@@ -138,7 +168,7 @@ function vufb_settings_page() {
 			<table class="widefat striped" style="max-width:900px">
 				<tr><td><strong>Send to client</strong></td><td><code><?php echo esc_html( $home . '?review=' . $c['review_key'] ); ?></code></td></tr>
 				<tr><td><strong>Your on-page link</strong></td><td><code><?php echo esc_html( $home . '?review=' . $c['admin_key'] ); ?></code></td></tr>
-				<tr><td><strong>Review all comments</strong></td><td><a href="<?php echo esc_url( $base . '/review.html?key=' . $c['admin_key'] ); ?>" target="_blank" class="button button-primary">Open review page</a> &nbsp; <?php echo (int) $pins; ?> comment<?php echo 1 === $pins ? '' : 's'; ?> so far<?php echo $bytes ? ', ' . esc_html( size_format( $bytes ) ) . ' of attachments' : ''; ?></td></tr>
+				<tr><td><strong>Review all comments</strong></td><td><a href="<?php echo esc_url( $base . '/review.html?key=' . rawurlencode( $c['admin_key'] ) . '&api=' . rawurlencode( $api ) ); ?>" target="_blank" class="button button-primary">Open review page</a> &nbsp; <?php echo (int) $pins; ?> comment<?php echo 1 === $pins ? '' : 's'; ?> so far<?php echo $bytes ? ', ' . esc_html( size_format( $bytes ) ) . ' of attachments' : ''; ?></td></tr>
 				<tr><td><strong>Upload limit</strong></td><td>Reviewers can attach files up to <?php echo esc_html( size_format( min( $maxup, 25 * 1048576 ) ) ); ?> each (server limit <?php echo esc_html( size_format( $maxup ) ); ?>).</td></tr>
 				<tr><td><strong>Switch off in a browser</strong></td><td><code>?review=off</code></td></tr>
 			</table>
