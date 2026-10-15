@@ -1,0 +1,7 @@
+# Client data never belongs in the repo: comments, keys and uploads.
+data/*
+!data/.htaccess
+!data/index.php
+
+.DS_Store
+*.zip

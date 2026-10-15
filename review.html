@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>VuFeedback review</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;font-size:14px;color:#1b263c;background:#f3f5f8}
+  header{background:#1b263c;color:#fff;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;flex:1}
+  header .stat{font-size:12px;opacity:.8}
+  .bar{padding:12px 24px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  select,input,button{font:inherit;border:1px solid #d5dbe5;border-radius:6px;padding:7px 10px;background:#fff;color:#1b263c}
+  button{cursor:pointer;font-weight:600}
+  button.primary{background:#1b263c;color:#fff;border-color:#1b263c}
+  main{padding:0 24px 40px;max-width:1100px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:#5b6b85;margin:24px 0 8px}
+  .card{background:#fff;border-radius:10px;padding:14px 16px;margin-bottom:10px;display:grid;grid-template-columns:34px 1fr auto;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .num{width:28px;height:28px;border-radius:50%;background:#e5533d;color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center}
+  .num.progress{background:#e69a17}.num.resolved{background:#7a8aa3}
+  .txt{white-space:pre-wrap;margin:4px 0 6px}
+  .meta{font-size:12px;color:#7a8aa3}
+  .tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:999px;background:#eef1f5;margin-right:4px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+  .tag.bug{background:#fbe4e0;color:#a3321f}.tag.question{background:#e3f1ff;color:#1f5aa3}.tag.high{background:#fff0d6;color:#8a5a00}
+  .replies{border-left:2px solid #eef1f5;padding-left:10px;margin-top:8px}
+  .reply{margin-bottom:6px;font-size:13px}.reply b{font-size:12px}
+  .side{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+  a{color:#0d6b58}
+  .empty{color:#7a8aa3;padding:40px;text-align:center}
+  .card.resolved{opacity:.6}
+  .files{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .file{display:flex;align-items:center;gap:8px;background:#f3f5f8;border-radius:6px;padding:6px 8px;font-size:12px;max-width:280px}
+  .file img{width:44px;height:44px;object-fit:cover;border-radius:4px}.file .ic{width:44px;height:44px;border-radius:4px;background:#dfe4ec;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#5b6b85;text-transform:uppercase}
+  .file a{font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;max-width:180px}
+  .file .rm{cursor:pointer;color:#a3321f;font-size:16px;padding:0 4px}
+</style>
+</head>
+<body>
+<header><h1>Feedback review</h1><span class="stat" id="stat"></span></header>
+<div class="bar">
+  <select id="fStatus"><option value="">All statuses</option><option value="open">Open</option><option value="progress">In progress</option><option value="resolved">Resolved</option></select>
+  <select id="fPage"><option value="">All pages</option></select>
+  <select id="fType"><option value="">All types</option><option value="bug">Bug</option><option value="change">Change</option><option value="question">Question</option></select>
+  <button id="refresh">Refresh</button>
+  <button id="csv">Export CSV</button>
+  <span style="flex:1"></span>
+  <span id="adminNote" class="meta"></span>
+</div>
+<main id="main"></main>
+<script>
+(function(){
+  var qs=new URLSearchParams(location.search);
+  var key=qs.get('key'); try{ if(key) localStorage.setItem('fb_key',key); key=key||localStorage.getItem('fb_key'); }catch(e){}
+  if(!key){ document.getElementById('main').innerHTML='<div class="empty">No key. Open this page from the review link.</div>'; return; }
+  var ENDPOINT='feedback.php', SITE=location.pathname.replace(/feedback\/review\.html$/,'');
+  var pins=[], admin=false;
+  function api(a,d){ return fetch(ENDPOINT+'?action='+a,{method:d?'POST':'GET',headers:{'X-Feedback-Key':key,'Content-Type':'application/json'},body:d?JSON.stringify(d):undefined}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||r.status);return j;});}); }
+  function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e;}
+  function fileUrl(a,dl){return ENDPOINT+'?action=file&f='+encodeURIComponent(a.id)+'&key='+encodeURIComponent(key)+(dl?'&dl=1':'');}
+  function isImg(a){return /\.(jpe?g|png|gif|webp)$/i.test(a.id);}
+  function fmtSize(b){return b>1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB';}
+  function fmt(iso){var d=new Date(iso);return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
+  var $=function(s){return document.querySelector(s);};
+
+  function load(){ api('list').then(function(j){ pins=j.pins||[]; admin=!!j.admin; $('#adminNote').textContent=admin?'Admin: you can change status and delete.':'Read-only view. Use the admin key to change status.'; fillPages(); render(); }).catch(function(e){ $('#main').innerHTML='<div class="empty">'+(e.message==='forbidden'?'Invalid key.':'Could not load: '+e.message)+'</div>'; }); }
+  function fillPages(){ var s=$('#fPage'), cur=s.value; s.innerHTML='<option value="">All pages</option>'; [].concat(pins.map(function(p){return p.page;})).filter(function(v,i,a){return a.indexOf(v)===i;}).sort().forEach(function(pg){var o=el('option','',pg);o.value=pg;s.appendChild(o);}); s.value=cur; }
+  function filtered(){ var st=$('#fStatus').value, pg=$('#fPage').value, ty=$('#fType').value; return pins.filter(function(p){return (!st||p.status===st)&&(!pg||p.page===pg)&&(!ty||p.type===ty);}); }
+  function render(){
+    var main=$('#main'); main.innerHTML='';
+    var open=pins.filter(function(p){return p.status==='open';}).length, prog=pins.filter(function(p){return p.status==='progress';}).length;
+    $('#stat').textContent=pins.length+' comments · '+open+' open · '+prog+' in progress · '+(pins.length-open-prog)+' resolved';
+    var f=filtered(); if(!f.length){ main.appendChild(el('div','empty','Nothing here.')); return; }
+    var byPage={}; f.forEach(function(p){(byPage[p.page]=byPage[p.page]||[]).push(p);});
+    Object.keys(byPage).sort().forEach(function(pg){
+      main.appendChild(el('h2','',(pg.replace(/^\//,'')||'home')+(byPage[pg][0].title?'  ·  '+byPage[pg][0].title.replace(/ \| .*$/,''):'')));
+      var all=pins.filter(function(p){return p.page===pg;});
+      byPage[pg].forEach(function(p){
+        var c=el('div','card '+p.status);
+        c.appendChild(el('div','num '+p.status, all.indexOf(p)+1));
+        var body=el('div');
+        var tags=el('div'); tags.appendChild(el('span','tag '+p.type,p.type)); if(p.priority==='high') tags.appendChild(el('span','tag high','high priority')); body.appendChild(tags);
+        body.appendChild(el('div','txt',p.text));
+        var meta=p.author+' · '+fmt(p.created)+(p.snippet?' · on "'+p.snippet.slice(0,60)+'"':'')+(p.viewport?' · '+p.viewport:'');
+        body.appendChild(el('div','meta',meta));
+        if(p.attachments&&p.attachments.length){ var fl=el('div','files'); p.attachments.forEach(function(a){ var f=el('div','file'); if(isImg(a)){var im=el('img');im.src=fileUrl(a);f.appendChild(im);}else f.appendChild(el('div','ic',a.id.split('.').pop())); var t=el('div'); var l=el('a','',a.name); l.href=fileUrl(a,!isImg(a)); l.target='_blank'; t.appendChild(l); t.appendChild(el('div','meta',fmtSize(a.size)+' · '+a.author)); f.appendChild(t); if(admin){var rm=el('span','rm','×');rm.title='Remove';rm.onclick=function(){if(!confirm('Remove '+a.name+'?'))return;api('unattach',{id:p.id,file:a.id}).then(function(j){p.attachments=j.pin.attachments;render();});};f.appendChild(rm);} fl.appendChild(f); }); body.appendChild(fl); }
+        if(p.replies&&p.replies.length){ var rs=el('div','replies'); p.replies.forEach(function(r){var d=el('div','reply');d.appendChild(el('b','',r.author+' · '+fmt(r.created)));d.appendChild(el('div','txt',r.text));rs.appendChild(d);}); body.appendChild(rs); }
+        c.appendChild(body);
+        var side=el('div','side');
+        var a=el('a','','Open on page'); a.href=(p.page.charAt(0)==='/'?location.origin+p.page:SITE+p.page)+'?review='+encodeURIComponent(key)+'#fb-'+p.id; a.target='_blank'; side.appendChild(a);
+        if(admin){
+          var sel=el('select'); [['open','Open'],['progress','In progress'],['resolved','Resolved']].forEach(function(o){var e=el('option','',o[1]);e.value=o[0];if(o[0]===p.status)e.selected=true;sel.appendChild(e);});
+          sel.onchange=function(){ api('status',{id:p.id,status:sel.value}).then(function(j){p.status=j.pin.status;render();}).catch(function(e){alert(e.message);}); };
+          side.appendChild(sel);
+          var del=el('button','','Delete'); del.onclick=function(){ if(!confirm('Delete this comment?'))return; api('delete',{id:p.id}).then(function(){pins=pins.filter(function(q){return q.id!==p.id;});render();}); }; side.appendChild(del);
+        }
+        c.appendChild(side); main.appendChild(c);
+      });
+    });
+  }
+  $('#fStatus').onchange=$('#fPage').onchange=$('#fType').onchange=render;
+  $('#refresh').onclick=load;
+  $('#csv').onclick=function(){
+    var q=function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';};
+    var rows=[['id','page','status','type','priority','author','created','comment','element','replies','attachments']];
+    filtered().forEach(function(p){rows.push([p.id,p.page,p.status,p.type,p.priority,p.author,p.created,p.text,p.snippet,(p.replies||[]).map(function(r){return r.author+': '+r.text;}).join(' | '),(p.attachments||[]).map(function(a){return a.name+' '+location.origin+location.pathname.replace(/review\.html$/,'')+fileUrl(a,true);}).join(' | ')]);});
+    var csv=rows.map(function(r){return r.map(q).join(',');}).join('\r\n');
+    var a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv); a.download='feedback.csv'; document.body.appendChild(a); a.click(); a.remove();
+  };
+  load();
+})();
+</script>
+</body>
+</html>
