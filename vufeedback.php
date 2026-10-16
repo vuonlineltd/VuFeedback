@@ -2,7 +2,7 @@
 /**
  * Plugin Name: VuFeedback
  * Description: On-page feedback pins for client review. Loads only for visitors with a review key. Settings > VuFeedback.
- * Version:     1.4.1
+ * Version:     1.5.0
  * Author:      Vu Digital
  * Author URI:  https://vudigital.co.uk
  * Update URI:  false
@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/storage.php';
 require_once __DIR__ . '/api.php';
+require_once __DIR__ . '/slack.php';
 
 define( 'VUFB_DIR', __DIR__ );
 
@@ -39,6 +40,14 @@ register_activation_hook(
 			$c['admin_key'] = vufb_key();
 		}
 		vufb_save_config( $c );
+	}
+);
+
+/* Deactivation: stop any Slack summary that was waiting. */
+register_deactivation_hook(
+	__FILE__,
+	function () {
+		wp_clear_scheduled_hook( 'vufb_slack_flush' );
 	}
 );
 
@@ -111,8 +120,9 @@ function vufb_settings_page() {
 		return;
 	}
 
-	$c   = vufb_config();
-	$msg = '';
+	$c     = vufb_config();
+	$slack = vufb_slack_config();
+	$msg   = '';
 
 	if ( isset( $_POST['vufb_nonce'] ) && wp_verify_nonce( sanitize_key( $_POST['vufb_nonce'] ), 'vufb_save' ) ) {
 		$c['review_key'] = preg_replace( '/[^A-Za-z0-9_-]/', '', wp_unslash( $_POST['review_key'] ?? '' ) ) ?: vufb_key();
@@ -125,6 +135,25 @@ function vufb_settings_page() {
 		}
 		$c['enabled'] = isset( $_POST['enabled'] ) ? '1' : '0';
 		$msg          = vufb_save_config( $c ) ? 'Saved.' : 'Could not save settings. Check the plugin\'s data folder is writable.';
+
+		// The webhook is never printed back; a blank field keeps the one already saved.
+		$new_url = trim( wp_unslash( $_POST['slack_url'] ?? '' ) );
+		if ( isset( $_POST['slack_remove'] ) ) {
+			$slack['url'] = '';
+		} elseif ( '' !== $new_url ) {
+			if ( vufb_slack_valid_url( $new_url ) ) {
+				$slack['url'] = $new_url;
+			} else {
+				$msg .= ' The Slack address was not saved: it must be a Slack Incoming Webhook (https://hooks.slack.com/services/…).';
+			}
+		}
+		$slack['skip_admin'] = isset( $_POST['slack_skip_admin'] ) ? '1' : '0';
+		vufb_slack_save_config( $slack );
+
+		if ( isset( $_POST['slack_test'] ) ) {
+			$sent = vufb_slack_post( vufb_slack_site() . ' · VuFeedback is connected. New comments on this site will be posted here.', true );
+			$msg .= true === $sent ? ' Test message sent to Slack.' : ' Slack test failed: ' . $sent;
+		}
 	}
 
 	$home     = home_url( '/' );
@@ -160,6 +189,17 @@ function vufb_settings_page() {
 				<tr><th>Enabled</th><td><label><input type="checkbox" name="enabled" <?php checked( $c['enabled'], '1' ); ?>> Load the feedback widget on the front end</label><p class="description">Visitors without a key never see anything either way. Untick when the review is over.</p></td></tr>
 				<tr><th><label for="review_key">Client key</label></th><td><input type="text" id="review_key" name="review_key" value="<?php echo esc_attr( $c['review_key'] ); ?>" class="regular-text code"> <button class="button" name="regen_review">Regenerate</button><p class="description">Lets people add comments and reply.</p></td></tr>
 				<tr><th><label for="admin_key">Admin key</label></th><td><input type="text" id="admin_key" name="admin_key" value="<?php echo esc_attr( $c['admin_key'] ); ?>" class="regular-text code"> <button class="button" name="regen_admin">Regenerate</button><p class="description">Everything above plus change status and delete. Keep this one to yourself.</p></td></tr>
+				<tr><th><label for="slack_url">Slack</label></th><td>
+					<?php if ( $slack['url'] ) : ?>
+						<p><strong>Connected</strong> to the webhook ending <code>…<?php echo esc_html( substr( $slack['url'], -4 ) ); ?></code>. <label><input type="checkbox" name="slack_remove"> Disconnect</label></p>
+					<?php endif; ?>
+					<input type="password" id="slack_url" name="slack_url" value="" class="large-text code" autocomplete="off" placeholder="<?php echo $slack['url'] ? 'Paste a new webhook to replace it' : 'https://hooks.slack.com/services/…'; ?>">
+					<p class="description">The site's channel &rarr; add the <em>Incoming Webhooks</em> app &rarr; copy its Webhook URL. Kept on the server only; reviewers never see it. The first comment is posted straight away, and anything after it within five minutes is posted as one summary.</p>
+					<p><label><input type="checkbox" name="slack_skip_admin" <?php checked( $slack['skip_admin'], '1' ); ?>> Don't post comments made with the admin key (our own)</label></p>
+					<?php if ( $slack['url'] ) : ?>
+						<button class="button" name="slack_test" value="1">Save and send a test message</button>
+					<?php endif; ?>
+				</td></tr>
 			</table>
 			<?php submit_button(); ?>
 		</form>

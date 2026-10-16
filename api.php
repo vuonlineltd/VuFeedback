@@ -88,6 +88,8 @@ function vufb_run_api( $action, $html_review = '', $html_admin = '' ) {
 	$get  = function_exists('wp_unslash') ? wp_unslash($_GET) : $_GET;
 	$post = function_exists('wp_unslash') ? wp_unslash($_POST) : $_POST;
 	define('VUFB_FILES_DIR', vufb_files_dir());
+	// Slack (WordPress only): post any summary that's waiting, in case cron is late.
+	if (function_exists('vufb_slack_flush')) vufb_slack_flush();
 
 	switch ($action) {
 
@@ -121,6 +123,7 @@ function vufb_run_api( $action, $html_review = '', $html_admin = '' ) {
 	    if ($pin['text'] === '') { http_response_code(422); echo json_encode(['error' => 'empty']); exit; }
 	    vufb_save(function (&$pins) use ($pin) { $pins[] = $pin; });
 	    echo json_encode(['pin' => $pin]);
+	    if (function_exists('vufb_slack_notify')) vufb_slack_notify('comment', $pin['author'], $pin['page'], $pin['text'], $isAdmin);
 	    break;
 
 	case 'reply':
@@ -133,6 +136,7 @@ function vufb_run_api( $action, $html_review = '', $html_admin = '' ) {
 	    });
 	    if (!$pin) { http_response_code(404); echo json_encode(['error' => 'not found']); exit; }
 	    echo json_encode(['pin' => $pin]);
+	    if (function_exists('vufb_slack_notify')) vufb_slack_notify('reply', $reply['author'], $pin['page'], $reply['text'], $isAdmin);
 	    break;
 
 	case 'status':

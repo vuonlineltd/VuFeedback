@@ -11,6 +11,9 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 delete_option( 'vufeedback_config' );
 delete_option( 'vufeedback_pins' );
 delete_option( 'vufeedback_lock' );
+delete_option( 'vufeedback_slack' );
+delete_option( 'vufeedback_slack_state' );
+wp_clear_scheduled_hook( 'vufb_slack_flush' );
 
 $vufb_uploads = wp_upload_dir( null, false );
 foreach ( glob( trailingslashit( $vufb_uploads['basedir'] ) . 'vufeedback-*', GLOB_ONLYDIR ) ?: array() as $vufb_dir ) {

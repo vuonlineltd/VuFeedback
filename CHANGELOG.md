@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.5.0 — 2026-10-16
+
+- **New: Slack notifications (WordPress).** Paste a channel's Incoming Webhook URL into
+  Settings > VuFeedback and new comments and replies get a nod in that channel. The first
+  is posted straight away; anything in the next five minutes is posted as one summary
+  ("Hugh added 12 more comments on /services/ and /faqs/"), so a busy review is a couple
+  of messages, not thirty. "Save and send a test message" checks the connection.
+- The webhook stays on the server: it is never printed on the settings page (only its
+  last four characters), sent to the widget, the review page or the CSV. Only
+  `https://hooks.slack.com/services/…` addresses are accepted.
+- Reviewer text is posted as plain text: `<`, `>` and `&` are escaped, so a comment can't
+  @channel, mention people or disguise a link. Links point at the page only, never a key;
+  link previews are off. Comments made with the admin key are not posted (switchable).
+- Posting never holds up or loses a comment: it happens after the save, without waiting
+  for Slack. Summaries go out from WP-Cron, and from the next VuFeedback request if cron
+  runs late.
+
 ## 1.4.1 — 2026-10-16
 
 - **Fix:** CSV export wrote attachment links with the review page's folder in front of

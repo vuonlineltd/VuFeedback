@@ -13,6 +13,7 @@ external services, no accounts and no database.
 | `feedback.js` | The widget. Draws inside a shadow root so it never clashes with the site's CSS. Does nothing for visitors without a key. |
 | `feedback.php` | The API for plain HTML sites. On WordPress it loads WordPress and gives the same answers as the WordPress route. |
 | `api.php` | The request handler shared by both routes. |
+| `slack.php` | WordPress only: posts new comments to the site's Slack channel. |
 | `storage.php` | Reads and writes settings and comments: the database on WordPress, files on a plain HTML site. |
 | `review.html` | Your triage view: filter, change status, delete, jump to each pin on its page, CSV export. |
 | `uninstall.php` | Removes VuFeedback's settings, comments and attachments when the plugin is deleted. |
@@ -50,6 +51,26 @@ Upgrading from an earlier VuFeedback or Site Feedback: replace the plugin's file
 file data (the plugin's `data/` folder or `uploads/vufeedback-…/`) is imported into the
 database on first use, keys included. From Site Feedback, copy its `data/` folder into
 `vufeedback/data/` first.
+
+## Slack notifications (WordPress)
+
+Each site can post a nod to its Slack channel when a reviewer adds a comment or a reply.
+
+1. In Slack, open the site's channel → **Integrations** (or channel settings) → **Add an
+   app** → **Incoming Webhooks** → choose the channel → copy the **Webhook URL**.
+2. Paste it into **Settings > VuFeedback > Slack**, tick **Save and send a test message**.
+
+The first comment is posted at once; anything else within five minutes becomes one
+summary message. Our own comments (made with the admin key) are skipped unless you untick
+that option.
+
+Security: the webhook URL never leaves the server (the settings page only shows its last
+four characters), and only `hooks.slack.com` addresses are accepted. What reviewers type
+is posted as plain text, so it can't @channel or mention anyone. Messages link to the page
+on the site, never to a key. If a webhook URL ever leaks, remove it in Slack and paste a
+new one; **Disconnect** stops posting immediately.
+
+Plain HTML sites don't have this: the webhook would have to sit in a file on the server.
 
 ## Install on a plain HTML site
 
