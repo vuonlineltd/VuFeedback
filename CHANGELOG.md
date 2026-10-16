@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.1 — 2026-10-16
+
+- **Fix:** CSV export wrote attachment links with the review page's folder in front of
+  an already-complete address (`…/plugins/vufeedback/https://…`).
+- **Security:** CSV attachment links no longer include the key. A CSV gets forwarded,
+  and the admin key went with it. Open attachments from the review page, or add
+  `&key=…` to a link.
+
 ## 1.4.0 — 2026-10-15
 
 - **Fix:** on WP Engine, no comment could be saved by a reviewer: PHP requested

@@ -105,10 +105,13 @@
   }
   $('#fStatus').onchange=$('#fPage').onchange=$('#fType').onchange=render;
   $('#refresh').onclick=load;
+  // A full, shareable link for the CSV: resolved against this page, without the key (a CSV gets
+  // forwarded; the key would go with it) or the cache-busting value. Add &key=… to open one.
+  function csvFileUrl(a){ var u=new URL(fileUrl(a,true),location.href); u.searchParams.delete('key'); u.searchParams.delete('_'); return u.href; }
   $('#csv').onclick=function(){
     var q=function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';};
     var rows=[['id','page','status','type','priority','author','created','comment','element','replies','attachments']];
-    filtered().forEach(function(p){rows.push([p.id,p.page,p.status,p.type,p.priority,p.author,p.created,p.text,p.snippet,(p.replies||[]).map(function(r){return r.author+': '+r.text;}).join(' | '),(p.attachments||[]).map(function(a){return a.name+' '+location.origin+location.pathname.replace(/review\.html$/,'')+fileUrl(a,true);}).join(' | ')]);});
+    filtered().forEach(function(p){rows.push([p.id,p.page,p.status,p.type,p.priority,p.author,p.created,p.text,p.snippet,(p.replies||[]).map(function(r){return r.author+': '+r.text;}).join(' | '),(p.attachments||[]).map(function(a){return a.name+' '+csvFileUrl(a);}).join(' | ')]);});
     var csv=rows.map(function(r){return r.map(q).join(',');}).join('\r\n');
     var a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv); a.download='feedback.csv'; document.body.appendChild(a); a.click(); a.remove();
   };

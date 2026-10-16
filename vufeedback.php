@@ -2,7 +2,7 @@
 /**
  * Plugin Name: VuFeedback
  * Description: On-page feedback pins for client review. Loads only for visitors with a review key. Settings > VuFeedback.
- * Version:     1.4.0
+ * Version:     1.4.1
  * Author:      Vu Digital
  * Author URI:  https://vudigital.co.uk
  * Update URI:  false
